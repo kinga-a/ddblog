@@ -190,7 +190,8 @@ await test('自动定位模式：请求不带城市参数，接口按 IP 返回�
 
   const autoPage = await (await call('GET', '/')).text();
   assert.ok(autoPage.includes('data-mode="auto"'), '自动模式应写入容器');
-  assert.ok(autoPage.includes('data-direct="1"'), '默认 UApiPro + 自动模式应允许浏览器直连');
+  // v1.7.16 起统一走服务端（EdgeOne GEO + KV 缓存），不再允许浏览器直连，避免 UApiPro 429
+  assert.ok(autoPage.includes('data-direct="0"'), '默认 UApiPro + 自动模式也应关闭浏览器直连');
 
   // 自定义接口不做浏览器直连，避免把 Key / 内网地址暴露给前端
   await saveTheme({ j_JWeather_Mode: 'auto', j_JWeather_Api: 'https://example.com/weather?city={city}' });

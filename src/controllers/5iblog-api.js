@@ -153,9 +153,10 @@ export async function handleBlogApi({ db, request, url, user = null, options = {
       }));
       return json({ total, data });
     }
-    // 侧栏天气：服务端 KV 缓存 10 分钟，前端异步填充，避免阻塞页面 SSR
+    // 侧栏天气：优先用 EdgeOne GEO 按访客位置查询，服务端 KV 缓存 10 分钟
     case 'weather': {
-      const data = await getWeather({ db, options });
+      const geo = request && request.eo && request.eo.geo ? request.eo.geo : null;
+      const data = await getWeather({ db, options, geo });
       return new Response(JSON.stringify({ code: data ? 1 : 0, data }), {
         headers: {
           'Content-Type': 'application/json; charset=utf-8',

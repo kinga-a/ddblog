@@ -72,8 +72,12 @@ function isHttpUrl(value) {
 }
 
 /** 构造请求地址：支持 {city} / {adcode} 占位符，也支持直接填完整 URL */
-export function buildWeatherUrl(config) {
-  if (config.mode !== 'manual') return buildAutoLocateUrl(config.api);
+export function buildWeatherUrl(config, geo = null) {
+  if (config.mode !== 'manual') {
+    const hasGeo =
+      geo && (geo.cityName || (Number.isFinite(Number(geo.latitude)) && Number.isFinite(Number(geo.longitude))));
+    return hasGeo ? buildGeoWeatherUrl(config.api, geo) : buildAutoLocateUrl(config.api);
+  }
   const city = config.city;
   const isAdcode = /^\d{6}$/.test(city);
   let url = config.api;
@@ -89,6 +93,35 @@ export function buildWeatherUrl(config) {
   const parsed = new URL(url);
   if (isAdcode) parsed.searchParams.set('adcode', city);
   else parsed.searchParams.set('city', city);
+  if (!parsed.searchParams.has('lang')) parsed.searchParams.set('lang', 'zh');
+  if (!parsed.searchParams.has('extended')) parsed.searchParams.set('extended', 'true');
+  if (!parsed.searchParams.has('forecast')) parsed.searchParams.set('forecast', 'true');
+  return parsed.toString();
+}
+
+/** 优先用 EdgeOne GEO（访客城市/经纬度）查询，回退到接口 IP 定位 */
+function buildGeoWeatherUrl(api, geo) {
+  let url = String(api || DEFAULT_WEATHER_API);
+  const cityName = geo.cityName ? String(geo.cityName).trim() : '';
+  const lat = Number(geo.latitude);
+  const lon = Number(geo.longitude);
+  const hasLatLon = Number.isFinite(lat) && Number.isFinite(lon);
+  if (url.includes('{city}') || url.includes('{adcode}')) {
+    if (cityName) return url.replaceAll('{city}', encodeURIComponent(cityName)).replaceAll('{adcode}', '');
+    if (hasLatLon) return url.replaceAll('{city}', '').replaceAll('{adcode}', '');
+    return buildAutoLocateUrl(api);
+  }
+  if (!isHttpUrl(url)) return url;
+  const parsed = new URL(url);
+  parsed.searchParams.delete('city');
+  parsed.searchParams.delete('adcode');
+  parsed.searchParams.delete('lat');
+  parsed.searchParams.delete('lon');
+  if (cityName) parsed.searchParams.set('city', cityName);
+  else if (hasLatLon) {
+    parsed.searchParams.set('lat', String(lat));
+    parsed.searchParams.set('lon', String(lon));
+  }
   if (!parsed.searchParams.has('lang')) parsed.searchParams.set('lang', 'zh');
   if (!parsed.searchParams.has('extended')) parsed.searchParams.set('extended', 'true');
   if (!parsed.searchParams.has('forecast')) parsed.searchParams.set('forecast', 'true');
@@ -209,30 +242,49 @@ async function requestWeather(url, key) {
   }
 }
 
+/** 按访客位置生成缓存键；无 GEO 时沿用旧单键，兼容原有缓存与测试 */
+function weatherCacheKey(geo) {
+  if (!geo) return WEATHER_CACHE_KEY;
+  const lat = Number(geo.latitude);
+  const lon = Number(geo.longitude);
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    return `${WEATHER_CACHE_KEY}:geo:${lat.toFixed(2)}:${lon.toFixed(2)}`;
+  }
+  if (geo.cityName) {
+    return `${WEATHER_CACHE_KEY}:city:${encodeURIComponent(String(geo.cityName)).slice(0, 60)}`;
+  }
+  return WEATHER_CACHE_KEY;
+}
+
 /** 读取缓存 / 请求接口；任何失败都返回 null，由前端隐藏天气块 */
-export async function getWeather({ db, options }) {
+export async function getWeather({ db, options, geo = null }) {
   const config = weatherConfig(options);
   if (!config.enabled) return null;
+  const cacheKey = weatherCacheKey(geo);
 
-  const cached = await db.kv.getJSON(WEATHER_CACHE_KEY).catch(() => null);
+  const cached = await db.kv.getJSON(cacheKey).catch(() => null);
   if (cached && cached.at && Date.now() - Number(cached.at) < (cached.error ? FAIL_TTL : CACHE_TTL)) {
     return cached.error ? null : cached.data || null;
   }
 
   try {
-    const raw = await requestWeather(buildWeatherUrl(config), config.key);
+    const raw = await requestWeather(buildWeatherUrl(config, geo), config.key);
     const data = normalizeWeather(raw, config);
     if (!data.weather && data.temperature === null && !data.days.length) {
       throw new Error('empty weather response');
     }
-    await db.kv.putJSON(WEATHER_CACHE_KEY, { at: Date.now(), data }).catch(() => {});
+    await db.kv.putJSON(cacheKey, { at: Date.now(), data }).catch(() => {});
     return data;
   } catch {
-    await db.kv.putJSON(WEATHER_CACHE_KEY, { at: Date.now(), error: true }).catch(() => {});
+    await db.kv.putJSON(cacheKey, { at: Date.now(), error: true }).catch(() => {});
     return null;
   }
 }
 
 export async function clearWeatherCache(db) {
   await db.kv.delete(WEATHER_CACHE_KEY).catch(() => {});
+  try {
+    const keys = await db.kv.listKeys(`${WEATHER_CACHE_KEY}:`, 500);
+    await Promise.all(keys.map((key) => db.kv.delete(key).catch(() => {})));
+  } catch {}
 }

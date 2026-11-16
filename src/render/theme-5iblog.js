@@ -354,10 +354,8 @@ function weatherCardHtml(options, id) {
   const rawDays = parseInt(options.blog.JWeather_Days || '4', 10);
   const weatherDays = Math.min(7, Math.max(1, Number.isFinite(rawDays) ? rawDays : 4));
   const weatherMode = options.blog.JWeather_Mode === 'manual' ? 'manual' : 'auto';
-  const weatherApi = String(options.blog.JWeather_Api || BLOG_DEFAULTS.JWeather_Api);
-  // 只有默认 UApiPro 接口支持浏览器直连（CORS），直连时接口看到的是访客 IP
-  const weatherDirect =
-    weatherMode === 'auto' && /^https:\/\/uapis\.cn\/api\/v1\/misc\/weather/.test(weatherApi) ? '1' : '0';
+  // EdgeOne 上 UApiPro 对浏览器直连会触发 429；统一走服务端（GEO + KV 缓存）
+  const weatherDirect = '0';
   return `<div class="blog_weather" id="${id}" data-days="${weatherDays}" data-mode="${weatherMode}" data-direct="${weatherDirect}" role="region" aria-label="天气">
       <div class="blog_weather__loading">天气加载中…</div>
     </div>`;
