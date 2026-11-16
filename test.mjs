@@ -1317,12 +1317,16 @@ await test('站点设置保存（含 Blog 主题配置）', async () => {
   assert.ok(home.includes('边缘君'), 'Blog 主题侧栏昵称生效');
 });
 
-await test('站点设置：开关组件渲染、三段默认展开、保存语义与旧下拉一致', async () => {
+await test('站点设置：开关组件渲染、三段常展开无折叠、保存语义与旧下拉一致', async () => {
   // 本区段不要调 loginAdmin()：它依赖下方才初始化的 _kv（见文件内注释），会话 cookie 沿用前面的登录
   const html = await call('GET', '/admin/settings').then((r) => r.text());
   assert.ok(html.includes('class="switch"'), '开关应渲染为切换组件');
   assert.ok(!/<select name="j_JCommentStatus"/.test(html), '评论功能开关不应再是下拉（头像源等真下拉除外）');
-  assert.equal((html.match(/details class="fold fold--in" open/g) || []).length, 3, '站点基础/Blog 主题/首页模块应默认展开');
+  assert.equal((html.match(/class="settings-panel__head"/g) || []).length, 3, '站点基础/侧边栏/首页轮播应常展开');
+  assert.ok(!/<details class="fold fold--in"/.test(html), '站点设置不再使用折叠组件');
+  for (const title of ['站点基础', '侧边栏', '首页轮播']) {
+    assert.ok(html.includes(`class="settings-panel__head">${title}`), `缺少板块：${title}`);
+  }
   // 模拟浏览器提交开关：关 = 只有隐藏域 off；开 = off 后再跟 on（entries 顺序合并，后者胜出）
   const postSettings = async (pairs) => {
     const body = new URLSearchParams();
@@ -1894,13 +1898,14 @@ await test('文章访问密码：勾选清除后恢复公开', async () => {
   cookie = adminCookie;
 });
 
-await test('站点设置：传统分页在评论默认状态之后', async () => {
+await test('站点设置：传统分页、评论功能、评论默认状态按顺序排列', async () => {
   await loginAdmin();
   const html = await (await call('GET', '/admin/settings')).text();
-  const iComment = html.indexOf('评论默认状态');
   const iPaging = html.indexOf('传统分页');
-  assert.ok(iComment !== -1 && iPaging !== -1, '两个字段都应存在');
-  assert.ok(iComment < iPaging, `传统分页应在评论默认状态之后，实际 ${iComment}/${iPaging}`);
+  const iComment = html.indexOf('评论功能');
+  const iStatus = html.indexOf('评论默认状态');
+  assert.ok(iPaging !== -1 && iComment !== -1 && iStatus !== -1, '三个字段都应存在');
+  assert.ok(iPaging < iComment && iComment < iStatus, `顺序应为传统分页→评论功能→评论默认状态，实际 ${iPaging}/${iComment}/${iStatus}`);
 });
 
 await test('页面排序：后台上下移动后前端导航按顺序展示', async () => {
@@ -1940,6 +1945,38 @@ await test('友链模式：输出参考站点的彩色三列卡片', async () =>
   for (const needle of ['blog_links__card', 'blog_links__title', 'blog_links__desc', 'blog_links__avatar', 'background:#F072B6', '一个互联网分享博客', 'https://example.com/avatar.png']) {
     assert.ok(html.includes(needle), `友链卡片缺少 ${needle}`);
   }
+});
+
+await test('页面特殊模式 guestbook：任意缩略名渲染便签墙并允许留言', async () => {
+  await loginAdmin();
+  const saved = await call('POST', '/admin/post', {
+    form: {
+      type: 'page', title: '留言墙测试', slug: 'wall-test',
+      text: '这里是测试留言墙', status: 'publish', allowComment: '0', field_mode: 'guestbook',
+    },
+  });
+  assert.equal(saved.status, 302);
+  const html = await (await call('GET', '/wall-test/')).text();
+  assert.ok(html.includes('blog_wall__board'), 'guestbook 模式应渲染便签墙');
+  assert.ok(html.includes('写一张便签'), '应出现留言表单');
+  const action = html.match(/action="\/comment\/(\d+)"/);
+  assert.ok(action, '留言表单应指向页面 cid');
+  // 页面关闭普通评论区，便签墙仍允许留言
+  const res = await call('POST', `/comment/${action[1]}`, {
+    form: { author: '路过', mail: 'guest@test.com', text: '测试便签' },
+  });
+  assert.equal(res.status, 200);
+  assert.ok((await res.text()).includes('Blog'));
+});
+
+await test('页面未设置 guestbook 模式时按普通页面渲染', async () => {
+  await loginAdmin();
+  await call('POST', '/admin/post', {
+    form: { type: 'page', title: '普通页面测试', slug: 'plain-page', text: '普通正文', status: 'publish', allowComment: '1' },
+  });
+  const html = await (await call('GET', '/plain-page/')).text();
+  assert.ok(!html.includes('blog_wall__board'), '普通页面不应渲染便签墙');
+  assert.ok(html.includes('普通正文'));
 });
 
 // ================= 汇总 =================

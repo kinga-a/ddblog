@@ -671,9 +671,9 @@ html body .blog_comment .substance video {
   height: auto;
 }
 
-/* ---------- 侧栏天气卡片（参考 Uiverse，宽度适配 250px 侧栏） ---------- */
+/* ---------- 侧栏天气卡片：与其它侧栏白卡统一，用主题色做点缀 ---------- */
 html body .blog_aside__item.blog_weather_aside {
-  background: #ec7263;
+  background: var(--background);
 }
 /* 移动端抽屉：天气卡片放在博主信息下方，沿用抽屉卡片的圆角与阴影 */
 html body .blog_header__slideout-weather {
@@ -681,14 +681,18 @@ html body .blog_header__slideout-weather {
   border-radius: var(--radius-wrap);
   box-shadow: var(--box-shadow);
   overflow: hidden;
-  background: #ec7263;
+  background: var(--background);
 }
 html body .blog_weather {
+  --weather-accent: #e59a63;
+  --weather-soft: #fff6ee;
+  --weather-line: #f4e4d6;
   position: relative;
   overflow: hidden;
   min-height: 112px;
-  color: #fff;
-  background: #ec7263;
+  color: var(--main);
+  background: var(--background);
+  background: linear-gradient(160deg, var(--weather-soft) 0%, var(--background) 64%);
   font-size: 13px;
 }
 html body .blog_weather__loading {
@@ -696,7 +700,7 @@ html body .blog_weather__loading {
   align-items: center;
   justify-content: center;
   min-height: 118px;
-  color: rgba(255, 255, 255, .85);
+  color: var(--minor);
   letter-spacing: .05em;
 }
 html body .blog_weather__hero {
@@ -712,7 +716,7 @@ html body .blog_weather__hero {
 html body .blog_weather__orb {
   position: absolute;
   border-radius: 50%;
-  background: #efc745;
+  background: var(--weather-accent);
   pointer-events: none;
 }
 html body .blog_weather__orb--1 {
@@ -720,21 +724,21 @@ html body .blog_weather__orb--1 {
   right: -90px;
   width: 230px;
   height: 230px;
-  opacity: .35;
+  opacity: .08;
 }
 html body .blog_weather__orb--2 {
   top: -105px;
   right: -50px;
   width: 160px;
   height: 160px;
-  opacity: .4;
+  opacity: .1;
 }
 html body .blog_weather__orb--3 {
   top: -38px;
   right: -8px;
   width: 76px;
   height: 76px;
-  opacity: .85;
+  opacity: .14;
 }
 html body .blog_weather__left {
   position: relative;
@@ -762,7 +766,7 @@ html body .blog_weather__icon svg {
   width: 100%;
   height: 100%;
   fill: none;
-  stroke: #fff;
+  stroke: var(--weather-accent);
   stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -772,10 +776,11 @@ html body .blog_weather__temp {
   font-weight: 600;
   line-height: 1;
   letter-spacing: -.02em;
+  color: var(--weather-accent);
 }
 html body .blog_weather__range {
   font-size: 12px;
-  opacity: .8;
+  color: var(--minor);
 }
 html body .blog_weather__right {
   position: relative;
@@ -794,7 +799,7 @@ html body .blog_weather__time {
 }
 html body .blog_weather__date {
   font-size: 11px;
-  opacity: .8;
+  color: var(--minor);
 }
 html body .blog_weather__city {
   max-width: 88px;
@@ -802,12 +807,12 @@ html body .blog_weather__city {
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: .9;
+  color: var(--minor);
 }
 html body .blog_weather__days {
   display: flex;
-  background: #974859;
-  border-top: 1px solid rgba(255, 255, 255, .08);
+  background: var(--weather-soft);
+  border-top: 1px solid var(--weather-line);
 }
 html body .blog_weather__day {
   display: flex;
@@ -817,8 +822,8 @@ html body .blog_weather__day {
   gap: 3px;
   min-width: 0;
   padding: 7px 2px 8px;
-  background: #a75265;
-  border-left: 1px solid rgba(255, 255, 255, .06);
+  background: transparent;
+  border-left: 1px solid var(--weather-line);
 }
 html body .blog_weather__day:first-child {
   border-left: 0;
@@ -826,7 +831,7 @@ html body .blog_weather__day:first-child {
 html body .blog_weather__day-week {
   font-size: 10px;
   white-space: nowrap;
-  opacity: .75;
+  color: var(--minor);
 }
 html body .blog_weather__day .blog_weather__icon {
   width: 16px;
@@ -835,11 +840,18 @@ html body .blog_weather__day .blog_weather__icon {
 html body .blog_weather__day-temp {
   font-size: 11px;
   white-space: nowrap;
+  color: var(--main);
 }
 html body .blog_weather__day-temp em {
   margin-left: 3px;
   font-style: normal;
-  opacity: .7;
+  color: var(--minor);
+}
+/* 深色模式：保留淡橙色调，避免刺眼 */
+html[data-night='night'] body .blog_weather {
+  --weather-accent: #d59a6f;
+  --weather-soft: #2b2119;
+  --weather-line: #3d3025;
 }
 
 /* 夜间模式：主题默认隐藏 Logo <img> 并显示一个原版 SVG Logo，

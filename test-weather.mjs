@@ -105,12 +105,25 @@ await test('纯函数：英文天气/星期映射与 URL 模板', async () => {
   assert.equal(data.days[0].week, '周四');
   assert.equal(data.tempMax, 20);
 
-  const c1 = { api: 'https://example.com/weather?city={city}&lang=zh', city: '北京' };
+  const c1 = { api: 'https://example.com/weather?city={city}&lang=zh', city: '北京', mode: 'manual' };
   assert.ok(buildWeatherUrl(c1).includes('city=%E5%8C%97%E4%BA%AC'));
-  const c2 = { api: 'https://example.com/weather', city: '110000' };
+  const c2 = { api: 'https://example.com/weather', city: '110000', mode: 'manual' };
   const u2 = new URL(buildWeatherUrl(c2));
   assert.equal(u2.searchParams.get('adcode'), '110000');
   assert.equal(u2.searchParams.get('lang'), 'zh');
+
+  const auto = new URL(buildWeatherUrl({
+    api: 'https://uapis.cn/api/v1/misc/weather?city={city}&lang=zh&extended=true&forecast=true',
+    city: '北京',
+    mode: 'auto',
+  }));
+  assert.ok(!auto.searchParams.has('city'), '自动模式不应传 city');
+  assert.ok(!auto.searchParams.has('adcode'), '自动模式不应传 adcode');
+  assert.equal(auto.searchParams.get('lang'), 'zh');
+  assert.equal(auto.searchParams.get('forecast'), 'true');
+
+  const autoFixed = new URL(buildWeatherUrl({ api: 'https://example.com/weather?city=北京', mode: 'auto' }));
+  assert.ok(!autoFixed.searchParams.has('city'), '自动模式应移除写死的 city 参数');
 });
 
 await test('默认关闭：页面无天气容器，API 返回 code 0', async () => {
@@ -125,13 +138,20 @@ await test('默认关闭：页面无天气容器，API 返回 code 0', async () 
 await test('开启后：页面出现容器，API 返回中文数据并缓存', async () => {
   await saveTheme({
     j_JWeather_Status: 'on',
+    j_JWeather_Mode: 'manual',
     j_JWeather_City: '北京',
     j_JWeather_Api: 'https://uapis.cn/api/v1/misc/weather?city={city}&lang=zh&extended=true&forecast=true',
     j_JWeather_Days: '4',
   });
   const page = await (await call('GET', '/')).text();
   assert.ok(page.includes('id="blog-weather"'), '开启后应渲染天气容器');
+  assert.ok(page.includes('id="blog-weather-slideout"'), '移动抽屉也应渲染天气容器');
+  const posAuthor = page.indexOf('blog_header__slideout-author');
+  const posWeather = page.indexOf('blog-weather-slideout');
+  assert.ok(posAuthor !== -1 && posWeather > posAuthor, '抽屉天气应位于博主信息之后');
   assert.ok(page.includes('data-days="4"'));
+  assert.ok(page.includes('data-mode="manual"'), '手动模式应写入容器');
+  assert.ok(page.includes('data-direct="0"'), '手动模式不应启用浏览器直连');
   assert.ok(page.includes('blog_weather_aside'), '天气容器应使用独立类名');
   assert.ok(!page.includes('blog_aside__item weather'), '不能复用主题原版 .weather 类，否则会触发和风天气脚本');
 
@@ -153,8 +173,35 @@ await test('开启后：页面出现容器，API 返回中文数据并缓存', a
   assert.equal(fetchCalls.length, 1, '第二次应命中 KV 缓存，不再请求接口');
 });
 
+await test('自动定位模式：请求不带城市参数，接口按 IP 返回城市', async () => {
+  await saveTheme({ j_JWeather_Mode: 'auto' });
+  fetchCalls.length = 0;
+  const payload = await (await call('GET', '/5iblog/api?routeType=weather')).json();
+  assert.equal(payload.code, 1);
+  assert.equal(payload.data.city, '北京');
+  assert.equal(fetchCalls.length, 1);
+  const autoUrl = new URL(fetchCalls[0].url);
+  assert.ok(!autoUrl.searchParams.has('city'), '自动模式请求不应带 city');
+  assert.ok(!autoUrl.searchParams.has('adcode'), '自动模式请求不应带 adcode');
+
+  const cfg = weatherConfig({ blog: { JWeather_Status: 'on' } });
+  assert.equal(cfg.mode, 'auto', '位置模式默认应为自动');
+  assert.equal(weatherConfig({ blog: { JWeather_Mode: 'manual' } }).mode, 'manual');
+
+  const autoPage = await (await call('GET', '/')).text();
+  assert.ok(autoPage.includes('data-mode="auto"'), '自动模式应写入容器');
+  assert.ok(autoPage.includes('data-direct="1"'), '默认 UApiPro + 自动模式应允许浏览器直连');
+
+  // 自定义接口不做浏览器直连，避免把 Key / 内网地址暴露给前端
+  await saveTheme({ j_JWeather_Mode: 'auto', j_JWeather_Api: 'https://example.com/weather?city={city}' });
+  const customPage = await (await call('GET', '/')).text();
+  assert.ok(customPage.includes('data-direct="0"'), '自定义接口不应启用浏览器直连');
+  await saveTheme({ j_JWeather_Api: 'https://uapis.cn/api/v1/misc/weather?city={city}&lang=zh&extended=true&forecast=true' });
+});
+
 await test('自定义接口：{city} 替换与 Bearer Key', async () => {
   await saveTheme({
+    j_JWeather_Mode: 'manual',
     j_JWeather_Api: 'https://example.com/weather?place={city}&lang=zh',
     j_JWeather_Key: 'secret-key',
   });
@@ -183,6 +230,7 @@ await test('关闭天气：页面不再渲染容器', async () => {
   await saveTheme({ j_JWeather_Status: 'off' });
   const page = await (await call('GET', '/')).text();
   assert.ok(!page.includes('id="blog-weather"'));
+  assert.ok(!page.includes('id="blog-weather-slideout"'));
   const payload = await (await call('GET', '/5iblog/api?routeType=weather')).json();
   assert.equal(payload.code, 0);
 });
