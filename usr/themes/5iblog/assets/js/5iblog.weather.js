@@ -1,6 +1,7 @@
 /**
- * 侧栏天气：读取 #blog-weather，异步请求 /5iblog/api?routeType=weather 并填充。
- * 服务端已做中文标准化与 10 分钟 KV 缓存；接口失败时移除整个侧栏块。
+ * 侧栏天气：读取 #blog-weather。
+ * 自动模式 + 默认 UApiPro 接口：浏览器直连接口，接口按访客 IP 定位；
+ * 直连失败、手动模式或自定义接口：回退到本站 /5iblog/api（服务器出口 IP）。
  */
 (function () {
   var el = document.getElementById('blog-weather');
@@ -81,14 +82,69 @@
     el.classList.add('is-ready');
   }
 
-  fetch('/5iblog/api?routeType=weather', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
-    .then(function (res) { return res.json(); })
-    .then(function (payload) {
-      if (!payload || payload.code !== 1 || !payload.data) throw new Error('weather unavailable');
-      render(payload.data);
-    })
-    .catch(function () {
-      var section = el.closest ? el.closest('.blog_aside__item') : null;
-      if (section) section.remove();
+  // 默认 UApiPro 接口：只有浏览器直连，接口才能看到访客 IP 并自动定位
+  var DIRECT_URL = 'https://uapis.cn/api/v1/misc/weather?lang=zh&extended=true&forecast=true';
+
+  /** 把 UApiPro 原始数据转成 render() 需要的结构 */
+  function adapt(raw) {
+    if (!raw || !raw.city) throw new Error('weather payload invalid');
+    var forecast = Array.isArray(raw.forecast) ? raw.forecast : [];
+    return {
+      city: raw.city,
+      weather: raw.weather,
+      temperature: raw.temperature,
+      tempMax: raw.temp_max,
+      tempMin: raw.temp_min,
+      humidity: raw.humidity,
+      wind: raw.wind_direction || '',
+      reportTime: raw.report_time,
+      aqi: raw.aqi == null ? '' : raw.aqi_category ? raw.aqi_category + ' ' + raw.aqi : raw.aqi,
+      days: forecast.map(function (d) {
+        return {
+          date: d.date,
+          week: String(d.week || '').replace('星期', '周'),
+          weather: d.weather_day || d.weather_night || '',
+          tempMax: d.temp_max,
+          tempMin: d.temp_min,
+        };
+      }),
+    };
+  }
+
+  function requestDirect() {
+    return fetch(DIRECT_URL, {
+      mode: 'cors',
+      credentials: 'omit',
+      headers: { Accept: 'application/json' },
+    }).then(function (res) {
+      if (!res.ok) throw new Error('weather ' + res.status);
+      return res.json();
+    }).then(function (raw) {
+      el.dataset.source = 'direct';
+      return adapt(raw);
     });
+  }
+
+  function requestServer() {
+    return fetch('/5iblog/api?routeType=weather', {
+      credentials: 'same-origin',
+      headers: { Accept: 'application/json' },
+    }).then(function (res) {
+      return res.json();
+    }).then(function (payload) {
+      if (!payload || payload.code !== 1 || !payload.data) throw new Error('weather unavailable');
+      el.dataset.source = 'server';
+      return payload.data;
+    });
+  }
+
+  var load = el.dataset.mode !== 'manual' && el.dataset.direct === '1'
+    ? requestDirect().catch(requestServer)
+    : requestServer();
+
+  load.then(render).catch(function (err) {
+    if (typeof console !== 'undefined' && console.warn) console.warn('[weather] 加载失败：', err && err.message);
+    var section = el.closest ? el.closest('.blog_aside__item') : null;
+    if (section) section.remove();
+  });
 })();

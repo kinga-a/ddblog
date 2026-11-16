@@ -26,6 +26,7 @@ export const DEFAULT_PAGES = {
     status: 'publish',
     allowComment: true,
     authorId: 1,
+    fields: { mode: 'guestbook' },
     text: '欢迎在这里留下你的想法、建议，或者只是打个招呼。',
   },
 };

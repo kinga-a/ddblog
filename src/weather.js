@@ -53,6 +53,8 @@ export function weatherConfig(options) {
   const days = Math.min(MAX_DAYS, Math.max(1, Number.isFinite(rawDays) ? rawDays : 4));
   return {
     enabled: blog.JWeather_Status === 'on',
+    // auto：不传城市，交给接口按请求 IP 自动定位；manual：使用 JWeather_City
+    mode: blog.JWeather_Mode === 'manual' ? 'manual' : 'auto',
     city: String(blog.JWeather_City || '北京').trim() || '北京',
     api: String(blog.JWeather_Api || DEFAULT_WEATHER_API).trim() || DEFAULT_WEATHER_API,
     key: String(blog.JWeather_Key || '').trim(),
@@ -71,6 +73,7 @@ function isHttpUrl(value) {
 
 /** 构造请求地址：支持 {city} / {adcode} 占位符，也支持直接填完整 URL */
 export function buildWeatherUrl(config) {
+  if (config.mode !== 'manual') return buildAutoLocateUrl(config.api);
   const city = config.city;
   const isAdcode = /^\d{6}$/.test(city);
   let url = config.api;
@@ -86,6 +89,26 @@ export function buildWeatherUrl(config) {
   const parsed = new URL(url);
   if (isAdcode) parsed.searchParams.set('adcode', city);
   else parsed.searchParams.set('city', city);
+  if (!parsed.searchParams.has('lang')) parsed.searchParams.set('lang', 'zh');
+  if (!parsed.searchParams.has('extended')) parsed.searchParams.set('extended', 'true');
+  if (!parsed.searchParams.has('forecast')) parsed.searchParams.set('forecast', 'true');
+  return parsed.toString();
+}
+
+/**
+ * 自动定位：删除 city / adcode 参数，让天气接口按请求来源 IP 定位。
+ * 兼容 {city} / {adcode} 模板与直接写死的城市参数。
+ */
+function buildAutoLocateUrl(api) {
+  let url = String(api || DEFAULT_WEATHER_API);
+  if (url.includes('{city}') || url.includes('{adcode}')) {
+    url = url.replaceAll('{city}', '').replaceAll('{adcode}', '');
+  }
+  if (!isHttpUrl(url)) return url;
+
+  const parsed = new URL(url);
+  parsed.searchParams.delete('city');
+  parsed.searchParams.delete('adcode');
   if (!parsed.searchParams.has('lang')) parsed.searchParams.set('lang', 'zh');
   if (!parsed.searchParams.has('extended')) parsed.searchParams.set('extended', 'true');
   if (!parsed.searchParams.has('forecast')) parsed.searchParams.set('forecast', 'true');

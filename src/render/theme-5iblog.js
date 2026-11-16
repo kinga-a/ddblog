@@ -46,26 +46,26 @@ function runtimeParts(value) {
 /** 5iblog 主题配置默认值（后台可改，存于 option theme:5iblog） */
 export const BLOG_DEFAULTS = {
   JFavicon: '/usr/themes/5iblog/assets/img/favicon.ico',
-  JLogo: '/usr/themes/5iblog/assets/img/aside_author_image.jpg',
+  JLogo: '/usr/themes/5iblog/assets/img/logo.gif',
   JBirthDay: '',
   JDocumentTitle: '',
   JAside_Author_Image: '/usr/themes/5iblog/assets/img/aside_author_image.jpg',
-  JAside_Author_Avatar: '',
+  JAside_Author_Avatar: '/usr/themes/5iblog/assets/img/tx.gif',
   JAside_Author_Nick: '',
   JAside_Author_Link: '#',
-  JAside_Author_Motto: '有钱终成眷属，没钱亲眼目睹',
+  JAside_Author_Motto: 'https://v1.jinrishici.com/rensheng.txt',
   JAside_Author_Nav: 'on',
   JAside_Hot_Num: '5',
   JAside_Newreply_Status: 'on',
   JAside_Timelife_Status: 'on',
   JAside_Flatterer: 'on',
   JWeather_Status: 'off',
+  JWeather_Mode: 'auto',
   JWeather_City: '北京',
   JWeather_Api: 'https://uapis.cn/api/v1/misc/weather?city={city}&lang=zh&extended=true&forecast=true',
   JWeather_Key: '',
   JWeather_Days: '4',
   JCommentStatus: 'on',
-  JGuestbook_Wall: 'on',
   JIndex_Hot: 'off',
   JIndex_Carousel_Status: 'off',
   JIndex_Carousel: '',
@@ -539,8 +539,13 @@ async function asideBlock(ctx) {
   if (options.blog.JWeather_Status === 'on') {
     const rawDays = parseInt(options.blog.JWeather_Days || '4', 10);
     const weatherDays = Math.min(7, Math.max(1, Number.isFinite(rawDays) ? rawDays : 4));
+    const weatherMode = options.blog.JWeather_Mode === 'manual' ? 'manual' : 'auto';
+    const weatherApi = String(options.blog.JWeather_Api || BLOG_DEFAULTS.JWeather_Api);
+    // 只有默认 UApiPro 接口支持浏览器直连（CORS），直连时接口看到的是访客 IP
+    const weatherDirect =
+      weatherMode === 'auto' && /^https:\/\/uapis\.cn\/api\/v1\/misc\/weather/.test(weatherApi) ? '1' : '0';
     html += `<section class="blog_aside__item blog_weather_aside">
-      <div class="blog_weather" id="blog-weather" data-days="${weatherDays}" role="region" aria-label="天气">
+      <div class="blog_weather" id="blog-weather" data-days="${weatherDays}" data-mode="${weatherMode}" data-direct="${weatherDirect}" role="region" aria-label="天气">
         <div class="blog_weather__loading">天气加载中…</div>
       </div>
     </section>`;
@@ -1054,7 +1059,7 @@ export async function renderArchivePage(ctx) {
   });
 }
 
-/** 便签留言墙（配合后台开关 JGuestbook_Wall 使用） */
+/** 便签留言墙（页面特殊模式 mode=guestbook 时使用） */
 export async function renderGuestbookWall(ctx, page) {
   const { db, options, url } = ctx;
   const comments = await db.listComments(page.cid);

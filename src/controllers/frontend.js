@@ -109,13 +109,13 @@ async function handleFrontendInner(ctx) {
   // ---- 归档页（导航「归档」）----
   if (path === '/archive' || path === '/archive/') return html(await theme.renderArchivePage(ctx));
 
-  // ---- 留言板（便签墙模式，后台开关 JGuestbook_Wall）----
+  // ---- 留言板：页面字段 mode=guestbook 时渲染便签墙（不再依赖站点设置开关）----
   if (path === '/guestbook' || path === '/guestbook/') {
     let page = await db.getContentBySlug('guestbook', 'page');
     if (!page && !IS_NODE) page = await ensureDefaultPage(db, 'guestbook');
     // 页面被删除 / Node 预览未创建时用内置文案兜底，避免导航链接 404
     page = page || DEFAULT_PAGES.guestbook;
-    if (page.status === 'publish' && ctx.options.blog?.JGuestbook_Wall === 'on') {
+    if (page.status === 'publish' && page.fields?.mode === 'guestbook') {
       return html(await theme.renderGuestbookWall(ctx, page));
     }
   }
@@ -342,6 +342,10 @@ async function renderSingle(ctx, post) {
     const grant = await db.getPostAccess(token);
     if (!grant || grant.cid !== post.cid) return renderProtected(ctx, post);
   }
+  // 页面特殊模式：便签留言墙（与 mode=links 一样由页面字段驱动，任意 slug 均可）
+  if (post.type === 'page' && post.fields?.mode === 'guestbook') {
+    return html(await theme.renderGuestbookWall(ctx, post));
+  }
   ctx.post = post;
   ctx.isPost = post.type === 'post';
 
@@ -561,9 +565,8 @@ async function handleCommentPost(ctx) {
   if (!sameOrigin(request)) return commentError('非法来源');
   const cid = parseInt(path.split('/')[2], 10);
   const post = await db.getContent(cid);
-  // 便签留言墙开启时，/guestbook/ 页面即使关闭了普通评论区仍允许贴留言
-  const wallEnabled =
-    !!post && post.type === 'page' && post.slug === 'guestbook' && ctx.options.blog?.JGuestbook_Wall === 'on';
+  // 便签墙页面即使关闭了普通评论区，也允许贴留言（由页面字段 mode=guestbook 决定）
+  const wallEnabled = !!post && post.type === 'page' && post.fields?.mode === 'guestbook';
   if (!post || (!post.allowComment && !wallEnabled)) return commentError('当前页面不可评论');
 
   const form = await request.formData().catch(() => null);

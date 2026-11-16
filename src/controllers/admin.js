@@ -1079,6 +1079,10 @@ async function postEditor(ctx, kind) {
   const tagNames = await postTagNames(db, post);
   const slugValue = post?.slug && String(post.slug) !== String(post.cid) ? post.slug : '';
   const catChecks = categoryChecks(cats, post?.categories || []);
+  const modeValue = post?.fields?.mode || '';
+  const modeOptions = ['', 'links', 'guestbook'];
+  if (modeValue && !modeOptions.includes(modeValue)) modeOptions.push(modeValue);
+  const modeLabels = { '': '普通内容', links: 'links（友链卡片）', guestbook: 'guestbook（便签留言墙）' };
 
   const body = `${MSG(ctx)}
   <h1>${isNew ? (isPage ? '创建页面' : '撰写文章') : `编辑：${esc(post.title)}`}</h1>
@@ -1103,6 +1107,19 @@ async function postEditor(ctx, kind) {
       </div>`}
     <div class="item"><label>内容（支持 Markdown，<!--more--> 之前为摘要）</label>
       <textarea name="text" id="blog-md-text" class="md-textarea" aria-label="内容（支持 Markdown）" style="min-height:320px">${esc(post?.text || '')}</textarea></div>
+    <div class="mode-help" data-mode-help hidden>
+      <div data-help-links hidden>
+        <strong>友链填写格式</strong>
+        <p>一行一条友链，字段用两个竖线 || 分隔：名称 || 链接 || 头像 || 描述 || 背景色</p>
+        <pre>5i博客||https://example.com||https://example.com/avatar.png||记录技术与生活||#4C83FF
+张三的博客||https://zhangsan.example.com||https://zhangsan.example.com/logo.jpg||前端开发 / 摄影爱好者||#F072B6</pre>
+        <p>头像、描述、背景色均可留空；头像为空时自动生成，背景色需 #RRGGBB；行首不要加 - 等列表符号。</p>
+      </div>
+      <div data-help-guestbook hidden>
+        <strong>留言墙模式</strong>
+        <p>整页会渲染为便签留言墙，正文内容作为留言板介绍展示在标题下方。</p>
+      </div>
+    </div>
     <div class="row">
       <div class="item"><label>状态</label>
         <select name="status">
@@ -1126,17 +1143,18 @@ async function postEditor(ctx, kind) {
       <div class="fields-grid">
         <div class="item"><input type="text" name="field_thumb" value="${esc(post?.fields?.thumb || '')}" placeholder="缩略图 URL（thumb）"></div>
         <div class="item"><input type="text" name="field_abstract" value="${esc(post?.fields?.abstract || '')}" placeholder="摘要（abstract）"></div>
-        <div class="item"><input type="text" name="field_mode" value="${esc(post?.fields?.mode || '')}" placeholder="特殊模式（mode，如 links）"></div>
+        <div class="item"><select name="field_mode" aria-label="特殊模式" title="特殊模式">${modeOptions.map((m) => `<option value="${esc(m)}"${modeValue === m ? ' selected' : ''}>${esc(modeLabels[m] || m)}</option>`).join('')}</select></div>
         <div class="item"><input type="text" name="field_keywords" value="${esc(post?.fields?.keywords || '')}" placeholder="SEO 关键词（keywords，逗号分隔）"></div>
         <div class="item"><input type="text" name="field_description" value="${esc(post?.fields?.description || '')}" placeholder="SEO 描述（description）"></div>
       </div>
-      <div class="hint">5iblog 主题扩展字段：thumb=封面图、abstract=列表摘要、keywords/description=SEO、mode=links 时正文按「名称||URL||头像」每行渲染为友链卡片</div>
+      <div class="hint">5iblog 主题扩展字段：thumb=封面图、abstract=列表摘要、keywords/description=SEO；特殊模式 mode=links 时正文按「名称||URL||头像」每行渲染友链卡片，mode=guestbook 时整页渲染便签留言墙（无需在站点设置中开启）。</div>
     </div>
     <button class="btn primary" type="submit">${isNew ? '发布' : '保存修改'}</button>
     <a class="btn" href="/admin/${isPage ? 'pages' : 'posts'}">返回列表</a>
   </form>
   </div>
   <link rel="stylesheet" href="/usr/themes/5iblog/assets/lib/easymde@2.18.0/easymde.min.css">
+  <script>(function(){var f=document.querySelector('form[action="/admin/post"]');if(!f)return;var s=f.querySelector('select[name="field_mode"]');var h=f.querySelector('[data-mode-help]');if(!s||!h)return;function sync(){var v=s.value,l=h.querySelector('[data-help-links]'),g=h.querySelector('[data-help-guestbook]');h.hidden=!(v==='links'||v==='guestbook');if(l)l.hidden=v!=='links';if(g)g.hidden=v!=='guestbook';}s.addEventListener('change',sync);sync();})();</script>
   <script src="/usr/themes/5iblog/assets/js/5iblog.admin-editor.min.js?v=${CONFIG.VERSION}" defer></script>`;
   return html(adminLayout(ctx, { title: isNew ? '撰写' : '编辑', active: isPage ? 'page' : 'post', body }));
 }
@@ -1494,79 +1512,87 @@ async function settingsPage(ctx) {
   <h1>站点设置</h1>
   <div class="card">
   <form method="post" action="/admin/settings" class="settings-form" id="settings-form">
-    <details class="fold fold--in" open>
-      <summary class="fold__head">站点基础</summary>
-      <div class="fold__body">
-    <div class="row">
+    <div class="settings-columns">
+    <div class="settings-col">
+    <section class="settings-panel">
+      <h2 class="settings-panel__head">站点基础</h2>
+      <div class="settings-panel__body">
+    <div class="settings-grid">
       <div class="item"><label>站点名称</label><input type="text" name="title" value="${esc(o.title || '')}"></div>
       <div class="item"><label>站点描述</label><input type="text" name="description" value="${esc(o.description || '')}"></div>
-      <div class="item"><label>SEO 关键词</label><input type="text" name="keywords" value="${esc(o.keywords || '')}"></div>
-    </div>
-    <div class="row">
-      <div class="item"><label>每页文章数</label><input type="number" name="pageSize" value="${o.pageSize || 10}" min="1" max="50"></div>
-      <div class="item"><label>评论默认状态</label><select name="commentStatus">
-        <option value="approved" ${o.commentStatus !== 'waiting' ? 'selected' : ''}>直接发布</option>
-        <option value="waiting" ${o.commentStatus === 'waiting' ? 'selected' : ''}>先审核后发布</option>
-      </select></div>
-      <div class="item"><label>传统分页</label>${onOffSelect('j_Pagination_Mode', theme.Pagination_Mode || 'off')}<p class="hint">开启：显示 1/2/3 分页，点击翻页；关闭：显示「查看更多」，点击追加下一页，全部加载后按钮消失。</p></div>
-    </div>
-      </div>
-    </details>
-    <details class="fold fold--in" open>
-      <summary class="fold__head">5iblog 主题设置</summary>
-      <div class="fold__body">
-    <div class="row">
-      <div class="item"><label>Logo 图片 URL</label><input type="text" name="j_JLogo" value="${esc(theme.JLogo || '')}"></div>
-      <div class="item"><label>Favicon URL</label><input type="text" name="j_JFavicon" value="${esc(theme.JFavicon || '')}"></div>
-      <div class="item"><label>建站日期（运行时间）</label><input type="text" name="j_JBirthDay" value="${esc(theme.JBirthDay || '')}" placeholder="2024/01/01（可省略时间）"></div>
-    </div>
-    <div class="row">
-      <div class="item"><label>侧栏博主昵称</label><input type="text" name="j_JAside_Author_Nick" value="${esc(theme.JAside_Author_Nick || '')}"></div>
-      <div class="item"><label>侧栏博主头像 URL</label><input type="text" name="j_JAside_Author_Avatar" value="${esc(theme.JAside_Author_Avatar || '')}"></div>
-      <div class="item"><label>侧栏博主链接</label><input type="text" name="j_JAside_Author_Link" value="${esc(theme.JAside_Author_Link || '')}"></div>
-    </div>
-    <div class="row">
-      <div class="item"><label>博主栏 / 侧边栏壁纸 URL</label><input type="text" name="j_JAside_Author_Image" value="${esc(theme.JAside_Author_Image || '')}"></div>
-      <div class="item"><label>博主格言（Motto）</label><input type="text" name="j_JAside_Author_Motto" value="${esc(theme.JAside_Author_Motto || '')}"></div>
-      <div class="item"><label>热门文章侧栏数量</label><input type="number" name="j_JAside_Hot_Num" value="${esc(theme.JAside_Hot_Num || '5')}" min="0" max="10"></div>
-    </div>
-    <div class="row">
-      <div class="item"><label>最新回复侧栏</label>${onOffSelect('j_JAside_Newreply_Status', theme.JAside_Newreply_Status)}</div>
-      <div class="item"><label>人生倒计时侧栏</label>${onOffSelect('j_JAside_Timelife_Status', theme.JAside_Timelife_Status)}</div>
-      <div class="item"><label>评论功能</label>${onOffSelect('j_JCommentStatus', theme.JCommentStatus)}</div>
-    </div>
-    <div class="row">
-      <div class="item"><label>天气侧栏</label>${onOffSelect('j_JWeather_Status', theme.JWeather_Status)}</div>
-      <div class="item"><label>天气城市 / 地区代码</label><input type="text" name="j_JWeather_City" value="${esc(theme.JWeather_City || '')}" placeholder="北京 或 110000"></div>
-      <div class="item"><label>天气预报天数</label><input type="number" name="j_JWeather_Days" value="${esc(theme.JWeather_Days || '4')}" min="1" max="7"></div>
-    </div>
-    <div class="row">
-      <div class="item"><label>天气接口 URL</label><input type="text" name="j_JWeather_Api" value="${esc(theme.JWeather_Api || '')}" placeholder="支持 {city} / {adcode} 占位符"></div>
-      <div class="item"><label>天气接口 API Key（可选）</label><input type="password" name="j_JWeather_Key" value="${esc(theme.JWeather_Key || '')}" autocomplete="new-password"></div>
-    </div>
-    <p class="hint">天气板块显示在「人生倒计时」上方；城市可填中文名或 6 位地区代码（如 110000）。默认使用 UApiPro 免费接口（中文），自定义接口需返回 weather、temperature、forecast 等兼容字段；服务端缓存 10 分钟，接口失败时自动隐藏。</p>
-    <div class="row">
-      <div class="item"><label>便签留言墙（需先建页面“guestbook”）</label>${onOffSelect('j_JGuestbook_Wall', theme.JGuestbook_Wall)}</div>
-      <div class="item"><label>舔狗日记侧栏</label>${onOffSelect('j_JAside_Flatterer', theme.JAside_Flatterer)}</div>
+      <div class="item"><label>导航最多显示页面数</label><input type="number" name="j_JNavMaxNum" value="${esc(theme.JNavMaxNum || '6')}" min="1" max="20"></div>
       <div class="item"><label>顶置文章IDs（逗号分隔）</label><input type="text" name="j_JStickPosts" value="${esc(theme.JStickPosts || '')}" placeholder="例如：1,2,3"></div>
-    </div>
-    <div class="row">
+      <div class="item"><label>每页文章数</label><input type="number" name="pageSize" value="${o.pageSize || 10}" min="1" max="50"></div>
+      <div class="item"><label>建站日期（运行时间）</label><input type="text" name="j_JBirthDay" value="${esc(theme.JBirthDay || '')}" placeholder="2024/01/01（可省略时间）"></div>
+      <div class="item"><label>SEO 关键词</label><input type="text" name="keywords" value="${esc(o.keywords || '')}"></div>
+      <div class="item"><label>Logo 图片 URL</label><input type="text" name="j_JLogo" value="${esc(theme.JLogo || '')}"></div>
       <div class="item"><label>头像源</label><select name="j_JAvatarSource">
         <option value="weavatar" ${theme.JAvatarSource === 'weavatar' ? 'selected' : ''}>WeAvatar (weavatar.com)</option>
         <option value="cravatar" ${theme.JAvatarSource === 'cravatar' ? 'selected' : ''}>Cravatar (cravatar.cn)</option>
         <option value="gravatar" ${theme.JAvatarSource === 'gravatar' ? 'selected' : ''}>Gravatar (gravatar.com)</option>
       </select></div>
-      <div class="item"><label>导航最多显示页面数</label><input type="number" name="j_JNavMaxNum" value="${esc(theme.JNavMaxNum || '6')}" min="1" max="20"></div>
+      <div class="item"><label>Favicon URL</label><input type="text" name="j_JFavicon" value="${esc(theme.JFavicon || '')}"></div>
       <div class="item"><label>ICP 备案号</label><input type="text" name="j_JICP" value="${esc(theme.JICP || '')}"></div>
-    </div>
-    <div class="row">
       <div class="item"><label>页脚自定义内容</label><input type="text" name="j_JFooter_Custom" value="${esc(theme.JFooter_Custom || '')}"></div>
     </div>
+    <div class="settings-grid settings-grid--3">
+      <div class="item"><label>传统分页</label>${onOffSelect('j_Pagination_Mode', theme.Pagination_Mode || 'off')}</div>
+      <div class="item"><label>评论功能</label>${onOffSelect('j_JCommentStatus', theme.JCommentStatus)}</div>
+      <div class="item"><label>评论默认状态</label><select name="commentStatus">
+        <option value="approved" ${o.commentStatus !== 'waiting' ? 'selected' : ''}>直接发布</option>
+        <option value="waiting" ${o.commentStatus === 'waiting' ? 'selected' : ''}>先审核后发布</option>
+      </select></div>
+    </div>
+    <p class="hint">传统分页：开启后显示 1/2/3 分页，点击翻页；关闭则显示「查看更多」，点击追加下一页，全部加载后按钮消失。</p>
       </div>
-    </details>
-    <details class="fold fold--in" open>
-      <summary class="fold__head">首页模块</summary>
-      <div class="fold__body">
+    </section>
+    </div>
+    <div class="settings-col">
+    <section class="settings-panel">
+      <h2 class="settings-panel__head">侧边栏</h2>
+      <div class="settings-panel__body">
+    <div class="settings-grid">
+      <div class="item"><label>侧栏博主昵称</label><input type="text" name="j_JAside_Author_Nick" value="${esc(theme.JAside_Author_Nick || '')}"></div>
+      <div class="item"><label>侧栏博主链接</label><input type="text" name="j_JAside_Author_Link" value="${esc(theme.JAside_Author_Link || '')}"></div>
+      <div class="item"><label>侧栏博主头像 URL</label><input type="text" name="j_JAside_Author_Avatar" value="${esc(theme.JAside_Author_Avatar || '')}"></div>
+      <div class="item"><label>博主栏 / 侧边栏壁纸 URL</label><input type="text" name="j_JAside_Author_Image" value="${esc(theme.JAside_Author_Image || '')}"></div>
+      <div class="item item--full"><label>博主格言（Motto）</label><input type="text" name="j_JAside_Author_Motto" value="${esc(theme.JAside_Author_Motto || '')}"></div>
+    </div>
+    <div class="settings-subhead">天气板块</div>
+    <div class="settings-grid">
+      <div class="item">
+        <div class="item-head">
+          <label for="j_JWeather_City">天气城市 / 地区代码</label>
+          ${onOffSelect('j_JWeather_Status', theme.JWeather_Status, '天气侧栏')}
+        </div>
+        <div class="weather-loc">
+          <input type="text" id="j_JWeather_City" name="j_JWeather_City" value="${esc(theme.JWeather_City || '')}" placeholder="北京 或 110000"${theme.JWeather_Mode === 'manual' ? '' : ' disabled'}>
+          <span class="seg" role="radiogroup" aria-label="位置获取方式">
+            <label class="seg__btn"><input type="radio" name="j_JWeather_Mode" value="auto"${theme.JWeather_Mode === 'manual' ? '' : ' checked'}><span>自动</span></label>
+            <label class="seg__btn"><input type="radio" name="j_JWeather_Mode" value="manual"${theme.JWeather_Mode === 'manual' ? ' checked' : ''}><span>手动</span></label>
+          </span>
+        </div>
+        <p class="hint">自动：默认接口由浏览器直连，按访客 IP 定位（失败回退服务器 IP）；手动：填写城市名或 6 位地区代码。</p>
+      </div>
+      <div class="item"><label>天气预报天数</label><input type="number" name="j_JWeather_Days" value="${esc(theme.JWeather_Days || '4')}" min="1" max="7"></div>
+      <div class="item"><label>天气接口 URL</label><input type="text" name="j_JWeather_Api" value="${esc(theme.JWeather_Api || '')}" placeholder="支持 {city} / {adcode} 占位符"></div>
+      <div class="item"><label>天气接口 API Key（可选）</label><input type="password" name="j_JWeather_Key" value="${esc(theme.JWeather_Key || '')}" autocomplete="new-password"></div>
+    </div>
+    <p class="hint">天气板块显示在「人生倒计时」上方；自动模式在默认 UApiPro 接口下由浏览器直连、按访客 IP 定位，自定义接口或直连失败时回退服务器出口 IP；手动模式可填中文名或 6 位地区代码（如 110000）。默认使用 UApiPro 免费接口（中文），自定义接口需返回 weather、temperature、forecast 等兼容字段；服务端缓存 10 分钟，接口失败时自动隐藏。</p>
+    <div class="settings-subhead">侧边栏模块</div>
+    <div class="settings-grid settings-grid--4">
+      <div class="item"><label>人生倒计时侧栏</label>${onOffSelect('j_JAside_Timelife_Status', theme.JAside_Timelife_Status)}</div>
+      <div class="item"><label>最新回复侧栏</label>${onOffSelect('j_JAside_Newreply_Status', theme.JAside_Newreply_Status)}</div>
+      <div class="item"><label>舔狗日记侧栏</label>${onOffSelect('j_JAside_Flatterer', theme.JAside_Flatterer)}</div>
+      <div class="item"><label>热门文章侧栏数量</label><input type="number" name="j_JAside_Hot_Num" value="${esc(theme.JAside_Hot_Num || '5')}" min="0" max="10"></div>
+    </div>
+      </div>
+    </section>
+    </div>
+    </div>
+    <section class="settings-panel">
+      <h2 class="settings-panel__head">首页轮播</h2>
+      <div class="settings-panel__body">
     <div class="home-module-grid">
       <section class="home-module">
         <div class="home-module__head">
@@ -1576,7 +1602,7 @@ async function settingsPage(ctx) {
         <div class="item">
           <label>轮播图数据</label>
           <textarea name="j_JIndex_Carousel" rows="9" class="code-area" placeholder="https://example.com/1.jpg || https://baidu.com || 百度一下">${esc(theme.JIndex_Carousel || '')}</textarea>
-          <p class="hint">用于显示首页轮播图，请务必填写正确的格式<br>格式：图片地址 || 跳转链接 || 标题（中间使用两个竖杠分隔）<br>其他：一行一个，一行代表一个轮播图<br>例如：<br>https://puui.qpic.cn/media_img/lena/PICykqaoi_580_1680/0 || https://baidu.com || 百度一下<br>https://puui.qpic.cn/tv/0/1223447268_1580580/0 || https://v.qq.com || 腾讯视频</p>
+          <p class="hint">用于显示首页轮播图，请务必填写正确的格式<br>格式：图片地址 || 跳转链接 || 标题（中间使用两个竖杠分隔）<br>其他：一行一个，一行代表一个轮播图</p>
         </div>
       </section>
       <section class="home-module">
@@ -1587,15 +1613,16 @@ async function settingsPage(ctx) {
         <div class="item">
           <label>广告位数据</label>
           <textarea name="j_JIndex_Ad" rows="7" class="code-area" placeholder="https://example.com/ad.jpg || https://baidu.com">${esc(theme.JIndex_Ad || '')}</textarea>
-          <p class="hint">请务必填写正确的格式<br>格式：广告图片 || 广告链接（中间使用两个竖杠分隔）<br>其他：一行一个，最多 8 个；桌面一排最多 4 个，手机一排 2 个<br>例如：<br>https://puui.qpic.cn/media_img/lena/PICykqaoi_580_1680/0 || https://baidu.com<br>https://puui.qpic.cn/tv/0/1223447268_1580580/0 || https://v.qq.com</p>
+          <p class="hint">请务必填写正确的格式<br>格式：广告图片 || 广告链接（中间使用两个竖杠分隔）<br>其他：一行一个，最多 8 个；桌面一排最多 4 个，手机一排 2 个</p>
         </div>
       </section>
     </div>
       </div>
-    </details>
+    </section>
   </form>
   </div>
-  <div class="settings-actions"><button class="btn primary" type="submit" form="settings-form">保存设置</button></div>`;
+  <div class="settings-actions"><button class="btn primary" type="submit" form="settings-form">保存设置</button></div>
+  <script>(function(){var f=document.getElementById('settings-form');if(!f)return;var city=f.querySelector('input[name="j_JWeather_City"]');var modes=f.querySelectorAll('input[name="j_JWeather_Mode"]');if(!city||!modes.length)return;function sync(){var checked=f.querySelector('input[name="j_JWeather_Mode"]:checked');var auto=!checked||checked.value==='auto';city.disabled=auto;var item=city.closest('.item');if(item)item.classList.toggle('is-auto',auto);}for(var i=0;i<modes.length;i++)modes[i].addEventListener('change',sync);sync();})();</script>`;
   return html(adminLayout(ctx, { title: '站点设置', active: 'settings', body }));
 }
 
@@ -1619,6 +1646,8 @@ async function saveSettings(ctx) {
     } else if (name === 'JIndex_Carousel' || name === 'JIndex_Ad') {
       // 多行配置统一换行，保留一行一条
       theme[name] = String(val).replace(/\r\n?/g, '\n').trim();
+    } else if (name === 'JWeather_Mode') {
+      theme[name] = String(val) === 'manual' ? 'manual' : 'auto';
     } else if (name === 'JWeather_City' || name === 'JWeather_Api' || name === 'JWeather_Key') {
       theme[name] = String(val).trim();
     } else if (name === 'JWeather_Days') {
@@ -1629,7 +1658,7 @@ async function saveSettings(ctx) {
     }
   }
   await db.setOption('theme:5iblog', theme);
-  if (['j_JWeather_Status', 'j_JWeather_City', 'j_JWeather_Api', 'j_JWeather_Key', 'j_JWeather_Days'].some((k) => form.has(k))) {
+  if (['j_JWeather_Status', 'j_JWeather_Mode', 'j_JWeather_City', 'j_JWeather_Api', 'j_JWeather_Key', 'j_JWeather_Days'].some((k) => form.has(k))) {
     await clearWeatherCache(db);
   }
   return redirect(url, '/admin/settings', { msg: 'saved' });
