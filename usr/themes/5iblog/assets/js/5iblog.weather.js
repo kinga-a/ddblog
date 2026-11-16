@@ -2,6 +2,9 @@
  * 侧栏天气：读取 #blog-weather（桌面侧栏）与 #blog-weather-slideout（移动抽屉）。
  * 自动模式 + 默认 UApiPro 接口：浏览器直连接口，接口按访客 IP 定位；
  * 直连失败、手动模式或自定义接口：回退到本站 /5iblog/api（服务器出口 IP）。
+ *
+ * 为避免 UApiPro 免费接口触发 429：成功结果本地缓存 10 分钟，
+ * 直连失败后冷却 5 分钟，并保留 24 小时内的旧数据兜底，避免天气空白。
  */
 (function () {
   var targets = [];
@@ -88,12 +91,71 @@
     target.classList.add('is-ready');
   }
 
+  function renderAll(data) {
+    targets.forEach(function (target) { render(target, data); });
+  }
+
   function markSource(source) {
     targets.forEach(function (t) { t.dataset.source = source; });
   }
 
+  function removeAll() {
+    targets.forEach(function (target) {
+      var section = target.closest ? target.closest('.blog_weather_aside, .blog_header__slideout-weather') : null;
+      if (section) section.remove();
+    });
+  }
+
   // 默认 UApiPro 接口：只有浏览器直连，接口才能看到访客 IP 并自动定位
   var DIRECT_URL = 'https://uapis.cn/api/v1/misc/weather?lang=zh&extended=true&forecast=true';
+  var CACHE_KEY = '5iblog:weather:v1';
+  var FAIL_KEY = '5iblog:weather:fail:v1';
+  var CACHE_TTL = 10 * 60 * 1000;
+  var STALE_TTL = 24 * 60 * 60 * 1000;
+  var FAIL_TTL = 5 * 60 * 1000;
+
+  function readCache(ttl) {
+    try {
+      var raw = window.sessionStorage.getItem(CACHE_KEY) || window.localStorage.getItem(CACHE_KEY);
+      if (!raw) return null;
+      var obj = JSON.parse(raw);
+      if (!obj || typeof obj.t !== 'number' || !obj.data) return null;
+      if (ttl && Date.now() - obj.t > ttl) return null;
+      return obj.data;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeCache(data) {
+    try {
+      var raw = JSON.stringify({ t: Date.now(), data: data });
+      window.sessionStorage.setItem(CACHE_KEY, raw);
+      window.localStorage.setItem(CACHE_KEY, raw);
+    } catch (e) {}
+  }
+
+  function writeFail() {
+    try { window.sessionStorage.setItem(FAIL_KEY, String(Date.now())); } catch (e) {}
+  }
+
+  function inFailCooldown() {
+    try {
+      var t = parseInt(window.sessionStorage.getItem(FAIL_KEY) || '0', 10);
+      return t > 0 && Date.now() - t < FAIL_TTL;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function fallbackStale() {
+    var stale = readCache(STALE_TTL);
+    if (stale) {
+      renderAll(stale);
+      return;
+    }
+    removeAll();
+  }
 
   /** 把 UApiPro 原始数据转成 render() 需要的结构 */
   function adapt(raw) {
@@ -122,16 +184,26 @@
   }
 
   function requestDirect() {
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    // UApiPro 偶尔会挂起或返回 524，2 秒内拿不到结果就回退本站 API
+    var timer = setTimeout(function () { if (controller) controller.abort(); }, 2000);
     return fetch(DIRECT_URL, {
       mode: 'cors',
       credentials: 'omit',
       headers: { Accept: 'application/json' },
+      signal: controller ? controller.signal : undefined,
     }).then(function (res) {
       if (!res.ok) throw new Error('weather ' + res.status);
       return res.json();
     }).then(function (raw) {
+      clearTimeout(timer);
+      var data = adapt(raw);
       markSource('direct');
-      return adapt(raw);
+      writeCache(data);
+      return data;
+    }).catch(function (err) {
+      clearTimeout(timer);
+      throw err;
     });
   }
 
@@ -144,21 +216,32 @@
     }).then(function (payload) {
       if (!payload || payload.code !== 1 || !payload.data) throw new Error('weather unavailable');
       markSource('server');
+      writeCache(payload.data);
       return payload.data;
     });
   }
 
-  var load = cfg.dataset.mode !== 'manual' && cfg.dataset.direct === '1'
-    ? requestDirect().catch(requestServer)
-    : requestServer();
+  var cached = readCache(CACHE_TTL);
+  if (cached) {
+    renderAll(cached);
+    return;
+  }
 
-  load.then(function (data) {
-    targets.forEach(function (target) { render(target, data); });
-  }).catch(function (err) {
-    if (typeof console !== 'undefined' && console.warn) console.warn('[weather] 加载失败：', err && err.message);
-    targets.forEach(function (target) {
-      var section = target.closest ? target.closest('.blog_weather_aside, .blog_header__slideout-weather') : null;
-      if (section) section.remove();
-    });
+  var directAllowed = cfg.dataset.mode !== 'manual' && cfg.dataset.direct === '1';
+  if (!directAllowed) {
+    requestServer().then(renderAll).catch(fallbackStale);
+    return;
+  }
+
+  // 直连刚失败过：5 分钟内跳过直连，减少 UApiPro 限流压力
+  if (inFailCooldown()) {
+    requestServer().then(renderAll).catch(fallbackStale);
+    return;
+  }
+
+  requestDirect().then(renderAll).catch(function (err) {
+    writeFail();
+    if (typeof console !== 'undefined' && console.warn) console.warn('[weather] 直连失败，回退本站：', err && err.message);
+    requestServer().then(renderAll).catch(fallbackStale);
   });
 })();

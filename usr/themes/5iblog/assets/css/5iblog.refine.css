@@ -671,7 +671,7 @@ html body .blog_comment .substance video {
   height: auto;
 }
 
-/* ---------- 侧栏天气卡片：与其它侧栏白卡统一，用主题色做点缀 ---------- */
+/* ---------- 侧栏天气卡片：与其它侧栏白卡统一，用淡橙点缀 ---------- */
 html body .blog_aside__item.blog_weather_aside {
   background: var(--background);
 }

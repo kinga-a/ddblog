@@ -24,7 +24,7 @@ const CSP_REPORT_ONLY = [
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  "connect-src 'self' https://uapis.cn",
+  "connect-src 'self' https://uapis.cn https://v1.jinrishici.com",
   "frame-ancestors 'self'",
   "base-uri 'self'",
   "form-action 'self'",
