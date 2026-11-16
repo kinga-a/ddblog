@@ -1,11 +1,17 @@
 /**
- * 侧栏天气：读取 #blog-weather。
+ * 侧栏天气：读取 #blog-weather（桌面侧栏）与 #blog-weather-slideout（移动抽屉）。
  * 自动模式 + 默认 UApiPro 接口：浏览器直连接口，接口按访客 IP 定位；
  * 直连失败、手动模式或自定义接口：回退到本站 /5iblog/api（服务器出口 IP）。
  */
 (function () {
-  var el = document.getElementById('blog-weather');
-  if (!el) return;
+  var targets = [];
+  var aside = document.getElementById('blog-weather');
+  var slideout = document.getElementById('blog-weather-slideout');
+  if (aside) targets.push(aside);
+  if (slideout) targets.push(slideout);
+  if (!targets.length) return;
+
+  var cfg = targets[0];
 
   var ICONS = {
     sun: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.2 5.2l1.6 1.6M17.2 17.2l1.6 1.6M18.8 5.2l-1.6 1.6M6.8 17.2l-1.6 1.6"/></svg>',
@@ -45,10 +51,10 @@
     return (n < 10 ? '0' : '') + n;
   }
 
-  function render(data) {
+  function render(target, data) {
     var now = new Date();
     var week = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
-    var maxDays = parseInt(el.dataset.days || '4', 10) || 4;
+    var maxDays = parseInt(target.dataset.days || '4', 10) || 4;
     var days = (data.days || []).slice(0, maxDays);
     var range = data.tempMax != null || data.tempMin != null
       ? '<div class="blog_weather__range">' + num(data.tempMax, '°') + ' / ' + num(data.tempMin, '°') + '</div>'
@@ -63,7 +69,7 @@
         }).join('') + '</div>'
       : '';
 
-    el.innerHTML =
+    target.innerHTML =
       '<div class="blog_weather__hero">' +
         '<div class="blog_weather__orb blog_weather__orb--1"></div>' +
         '<div class="blog_weather__orb blog_weather__orb--2"></div>' +
@@ -79,7 +85,11 @@
           '<div class="blog_weather__city" title="' + esc(data.city || '') + '">' + esc(data.city || '') + '</div>' +
         '</div>' +
       '</div>' + daysHtml;
-    el.classList.add('is-ready');
+    target.classList.add('is-ready');
+  }
+
+  function markSource(source) {
+    targets.forEach(function (t) { t.dataset.source = source; });
   }
 
   // 默认 UApiPro 接口：只有浏览器直连，接口才能看到访客 IP 并自动定位
@@ -120,7 +130,7 @@
       if (!res.ok) throw new Error('weather ' + res.status);
       return res.json();
     }).then(function (raw) {
-      el.dataset.source = 'direct';
+      markSource('direct');
       return adapt(raw);
     });
   }
@@ -133,18 +143,22 @@
       return res.json();
     }).then(function (payload) {
       if (!payload || payload.code !== 1 || !payload.data) throw new Error('weather unavailable');
-      el.dataset.source = 'server';
+      markSource('server');
       return payload.data;
     });
   }
 
-  var load = el.dataset.mode !== 'manual' && el.dataset.direct === '1'
+  var load = cfg.dataset.mode !== 'manual' && cfg.dataset.direct === '1'
     ? requestDirect().catch(requestServer)
     : requestServer();
 
-  load.then(render).catch(function (err) {
+  load.then(function (data) {
+    targets.forEach(function (target) { render(target, data); });
+  }).catch(function (err) {
     if (typeof console !== 'undefined' && console.warn) console.warn('[weather] 加载失败：', err && err.message);
-    var section = el.closest ? el.closest('.blog_aside__item') : null;
-    if (section) section.remove();
+    targets.forEach(function (target) {
+      var section = target.closest ? target.closest('.blog_weather_aside, .blog_header__slideout-weather') : null;
+      if (section) section.remove();
+    });
   });
 })();

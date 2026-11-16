@@ -675,6 +675,14 @@ html body .blog_comment .substance video {
 html body .blog_aside__item.blog_weather_aside {
   background: #ec7263;
 }
+/* 移动端抽屉：天气卡片放在博主信息下方，沿用抽屉卡片的圆角与阴影 */
+html body .blog_header__slideout-weather {
+  margin-bottom: 15px;
+  border-radius: var(--radius-wrap);
+  box-shadow: var(--box-shadow);
+  overflow: hidden;
+  background: #ec7263;
+}
 html body .blog_weather {
   position: relative;
   overflow: hidden;

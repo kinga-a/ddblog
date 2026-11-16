@@ -348,6 +348,21 @@ function scripts(ctx, extra = []) {
  *         li > a.link.panel + ul.slides.panel-body（栏目 / 页面的手风琴，
  *              .in 时 .icon 旋转 90 度，由 5iblog.global.js 驱动）
  * ------------------------------------------------------------------ */
+/** 天气卡片：桌面侧栏与移动端抽屉共用配置，用 id 区分容器 */
+function weatherCardHtml(options, id) {
+  if (options.blog.JWeather_Status !== 'on') return '';
+  const rawDays = parseInt(options.blog.JWeather_Days || '4', 10);
+  const weatherDays = Math.min(7, Math.max(1, Number.isFinite(rawDays) ? rawDays : 4));
+  const weatherMode = options.blog.JWeather_Mode === 'manual' ? 'manual' : 'auto';
+  const weatherApi = String(options.blog.JWeather_Api || BLOG_DEFAULTS.JWeather_Api);
+  // 只有默认 UApiPro 接口支持浏览器直连（CORS），直连时接口看到的是访客 IP
+  const weatherDirect =
+    weatherMode === 'auto' && /^https:\/\/uapis\.cn\/api\/v1\/misc\/weather/.test(weatherApi) ? '1' : '0';
+  return `<div class="blog_weather" id="${id}" data-days="${weatherDays}" data-mode="${weatherMode}" data-direct="${weatherDirect}" role="region" aria-label="天气">
+      <div class="blog_weather__loading">天气加载中…</div>
+    </div>`;
+}
+
 const SLIDEOUT_ICONS = {
   post: `<path d="M606.227 985.923H164.75c-69.715 0-126.404-56.722-126.404-126.442V126.477C38.346 56.755 95.04 0 164.75 0h619.275c69.715 0 126.549 56.755 126.549 126.477v503.925c0 18.216-14.814 32.997-33.07 32.997-18.183 0-32.925-14.78-32.925-32.997V126.477c0-33.355-27.2-60.488-60.554-60.488H164.75c-33.353 0-60.41 27.133-60.41 60.488v733.004c0 33.353 27.057 60.441 60.41 60.441h441.477c18.183 0 32.925 14.787 32.925 33.004 0 18.211-14.742 32.997-32.925 32.997zm0 0" />
           <path d="M657.62 322.056H291.154c-18.183 0-32.924-14.786-32.924-33.003 0-18.21 14.74-32.998 32.924-32.998H657.62c18.256 0 33.07 14.787 33.07 32.998 0 18.217-14.814 33.003-33.07 33.003zm0 0M657.62 504.749H291.154c-18.183 0-32.924-14.78-32.924-32.993 0-18.222 14.74-32.997 32.924-32.997H657.62c18.256 0 33.07 14.775 33.07 32.997 0 18.218-14.814 32.993-33.07 32.993zm0 0M445.611 687.486H291.154c-18.183 0-32.924-14.78-32.924-33.004 0-18.21 14.74-32.991 32.924-32.991h154.457c18.184 0 32.998 14.78 32.998 32.991 0 18.224-14.814 33.004-32.998 33.004zm0 0M866.482 1024c-8.447 0-16.896-3.225-23.34-9.662L577.595 748.786c-7.156-7.123-10.592-17.07-9.446-27.056l8.733-77.728c1.788-15.321 13.885-27.378 29.2-29.06l77.45-8.52c10.443-.965 19.9 2.433 26.905 9.449l265.558 265.551c12.875 12.877 12.875 33.784 0 46.666l-86.184 86.25c-6.438 6.437-14.887 9.662-23.33 9.662zm-231.05-310.646l231.05 231.018 39.575-39.62-231.043-231.05-35.505 3.938-4.076 35.714zm0 0" />`,
@@ -396,6 +411,7 @@ async function slideoutBlock(ctx) {
 
   // 侧边栏壁纸与博主栏背景图共用同一个设置，避免两处各存一份 URL
   const slideoutImage = asideBackground(options);
+  const slideoutWeather = weatherCardHtml(options, 'blog-weather-slideout');
   return `<div class="blog_header__slideout">
     <img width="100%" height="150" class="blog_header__slideout-image" src="${escapeHtml(slideoutImage)}" alt="侧边栏壁纸" />
     <div class="blog_header__slideout-author">
@@ -405,6 +421,7 @@ async function slideoutBlock(ctx) {
         <p class="motto blog_motto"></p>
       </div>
     </div>
+    ${slideoutWeather ? `<div class="blog_header__slideout-weather">${slideoutWeather}</div>` : ''}
     <ul class="blog_header__slideout-count">
       <li class="item">
         ${icon(SLIDEOUT_ICONS.post, 15)}
@@ -536,19 +553,9 @@ async function asideBlock(ctx) {
     </div>
   </section>`;
 
-  if (options.blog.JWeather_Status === 'on') {
-    const rawDays = parseInt(options.blog.JWeather_Days || '4', 10);
-    const weatherDays = Math.min(7, Math.max(1, Number.isFinite(rawDays) ? rawDays : 4));
-    const weatherMode = options.blog.JWeather_Mode === 'manual' ? 'manual' : 'auto';
-    const weatherApi = String(options.blog.JWeather_Api || BLOG_DEFAULTS.JWeather_Api);
-    // 只有默认 UApiPro 接口支持浏览器直连（CORS），直连时接口看到的是访客 IP
-    const weatherDirect =
-      weatherMode === 'auto' && /^https:\/\/uapis\.cn\/api\/v1\/misc\/weather/.test(weatherApi) ? '1' : '0';
-    html += `<section class="blog_aside__item blog_weather_aside">
-      <div class="blog_weather" id="blog-weather" data-days="${weatherDays}" data-mode="${weatherMode}" data-direct="${weatherDirect}" role="region" aria-label="天气">
-        <div class="blog_weather__loading">天气加载中…</div>
-      </div>
-    </section>`;
+  const asideWeather = weatherCardHtml(options, 'blog-weather');
+  if (asideWeather) {
+    html += `<section class="blog_aside__item blog_weather_aside">${asideWeather}</section>`;
   }
 
   if (options.blog.JAside_Timelife_Status === 'on') {
